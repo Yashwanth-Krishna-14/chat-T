@@ -100,34 +100,37 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  connectSocket: () => {
-    const { authUser } = get();
-    if (!authUser || get().socket?.connected) return;
+ connectSocket: () => {
+  const { authUser, socket } = get();
+  if (!authUser || socket) return;
 
-    const socket = io(SOCKET_URL, {
-      query: {
-        userId: authUser._id,
-      },
-      withCredentials: true, // Important for cross-origin with cookies
-      transports: ["websocket", "polling"], // Ensure both transports work
-    });
-    socket.connect();
+  const newSocket = io(SOCKET_URL, {
+    query: { userId: authUser._id },
+    withCredentials: true,
+    transports: [ "polling","websocket"],
+    autoConnect: true,
+  });
 
-    set({ socket: socket });
+  set({ socket: newSocket });
 
-    socket.on("connect", () => {
-      console.log("Socket connected:", socket.id);
-    });
+  newSocket.on("connect", () => {
+    console.log("Socket connected:", newSocket.id);
+  });
 
-    socket.on("connect_error", (error) => {
-      console.error("Socket connection error:", error);
-    });
+  newSocket.on("connect_error", (error) => {
+    console.error("Socket connection error:", error);
+  });
 
-    socket.on("getOnlineUsers", (userIds) => {
-      set({ onlineUsers: userIds });
-    });
-  },
+  newSocket.on("getOnlineUsers", (userIds) => {
+    set({ onlineUsers: userIds });
+  });
+},
   disconnectSocket: () => {
-    if (get().socket?.connected) get().socket.disconnect();
-  },
+  const socket = get().socket;
+  if (socket) {
+    socket.off();       // remove all listeners
+    socket.disconnect();
+  }
+  set({ socket: null });
+},
 }));
