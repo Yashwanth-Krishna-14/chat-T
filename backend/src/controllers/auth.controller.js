@@ -5,6 +5,7 @@ import cloudinary from "../lib/cloudinary.js";
 
 export const signup = async (req, res) => {
   const { fullName, email, password } = req.body;
+
   try {
     if (!fullName || !email || !password) {
       return res.status(400).json({ message: "All fields are required" });
@@ -17,12 +18,12 @@ export const signup = async (req, res) => {
     const user = await User.findOne({ email });
 
     if (user) {
-      // Check if user is a Google user
       if (user.authProvider === "google") {
-        return res.status(400).json({ 
-          message: "This email is already registered with Google. Please sign in with Google." 
+        return res.status(400).json({
+          message: "This email is already registered with Google. Please sign in with Google.",
         });
       }
+
       return res.status(400).json({ message: "Email already exists" });
     }
 
@@ -36,21 +37,19 @@ export const signup = async (req, res) => {
       authProvider: "local",
     });
 
-    if (newUser) {
-      // generate jwt token here
-      generateToken(newUser._id, res);
-      await newUser.save();
+    await newUser.save();
 
-      res.status(201).json({
-        _id: newUser._id,
-        fullName: newUser.fullName,
-        email: newUser.email,
-        profilePic: newUser.profilePic,
-        authProvider: newUser.authProvider,
-      });
-    } else {
-      res.status(400).json({ message: "Invalid user data" });
-    }
+    // generate jwt token + set cookie
+    const token = generateToken(newUser._id, res);
+
+    res.status(201).json({
+      _id: newUser._id,
+      fullName: newUser.fullName,
+      email: newUser.email,
+      profilePic: newUser.profilePic,
+      authProvider: newUser.authProvider,
+      token,
+    });
   } catch (error) {
     console.log("Error in signup controller", error.message);
     res.status(500).json({ message: "Internal Server Error" });
@@ -59,6 +58,7 @@ export const signup = async (req, res) => {
 
 export const login = async (req, res) => {
   const { email, password } = req.body;
+
   try {
     const user = await User.findOne({ email });
 
@@ -68,17 +68,19 @@ export const login = async (req, res) => {
 
     // Check if user is a Google user trying to use password login
     if (user.authProvider === "google") {
-      return res.status(400).json({ 
-        message: "This account uses Google authentication. Please sign in with Google." 
+      return res.status(400).json({
+        message: "This account uses Google authentication. Please sign in with Google.",
       });
     }
 
     const isPasswordCorrect = await bcrypt.compare(password, user.password);
+
     if (!isPasswordCorrect) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    generateToken(user._id, res);
+    // generate jwt token + set cookie
+    const token = generateToken(user._id, res);
 
     res.status(200).json({
       _id: user._id,
@@ -86,6 +88,7 @@ export const login = async (req, res) => {
       email: user.email,
       profilePic: user.profilePic,
       authProvider: user.authProvider,
+      token,
     });
   } catch (error) {
     console.log("Error in login controller", error.message);
@@ -113,6 +116,7 @@ export const updateProfile = async (req, res) => {
     }
 
     const uploadResponse = await cloudinary.uploader.upload(profilePic);
+
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       { profilePic: uploadResponse.secure_url },
