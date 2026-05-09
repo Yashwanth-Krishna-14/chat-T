@@ -32,30 +32,31 @@ export const googleAuth = async (req, res) => {
     let user = await User.findOne({ email });
 
     if (user) {
-      // User exists, update Google info if not already linked
       if (!user.googleId) {
         user.googleId = googleId;
         user.authProvider = "google";
+
         if (!user.profilePic && picture) {
           user.profilePic = picture;
         }
+
         await user.save();
       }
     } else {
-      // Create new user
       user = new User({
         email,
-        fullName: name || email.split('@')[0],
+        fullName: name || email.split("@")[0],
         profilePic: picture || "",
         googleId,
         authProvider: "google",
-        password: "", // No password for Google users
+        password: "",
       });
+
       await user.save();
     }
 
-    // Generate JWT token and set cookie
-    generateToken(user._id, res);
+    // Generate JWT token + set cookie
+    const jwtToken = generateToken(user._id, res);
 
     res.status(200).json({
       _id: user._id,
@@ -63,14 +64,15 @@ export const googleAuth = async (req, res) => {
       email: user.email,
       profilePic: user.profilePic,
       authProvider: user.authProvider,
+      token: jwtToken, // ✅ return token also
     });
   } catch (error) {
     console.log("Error in googleAuth controller:", error.message);
-    
+
     if (error.message.includes("Token used too late")) {
       return res.status(400).json({ message: "Google token has expired" });
     }
-    
+
     res.status(500).json({ message: "Google authentication failed" });
   }
 };
