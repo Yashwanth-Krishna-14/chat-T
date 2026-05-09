@@ -11,6 +11,9 @@ import { app, server } from "./lib/socket.js";
 
 dotenv.config();
 
+//REQUIRED for secure cookies on Render
+app.set("trust proxy", 1);
+
 const PORT = process.env.PORT || 5001;
 
 // Body parsers
@@ -32,7 +35,10 @@ app.use(
 );
 
 // Handle preflight requests
-app.options("*", cors());
+app.options("*", cors({
+  origin: process.env.CLIENT_URL,
+  credentials: true,
+}));
 
 // Debug route (optional)
 app.get("/api/debug/cookies", (req, res) => {
