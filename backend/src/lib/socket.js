@@ -5,7 +5,7 @@ import express from "express";
 const app = express();
 const server = http.createServer(app);
 
-// userId -> Set of socketIds
+// userId -> Set(socketId)
 const userSocketMap = {};
 
 export function getReceiverSocketIds(userId) {
@@ -18,7 +18,7 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
     credentials: true,
   },
-  transports: ["polling", "websocket"], // polling first is more stable on Render
+  transports: ["polling", "websocket"], // stable on Render
   pingTimeout: 60000,
   pingInterval: 25000,
 });
@@ -32,6 +32,7 @@ io.on("connection", (socket) => {
     if (!userSocketMap[userId]) {
       userSocketMap[userId] = new Set();
     }
+
     userSocketMap[userId].add(socket.id);
   }
 
@@ -43,7 +44,6 @@ io.on("connection", (socket) => {
     if (userId && userSocketMap[userId]) {
       userSocketMap[userId].delete(socket.id);
 
-      // remove user if no active sockets left
       if (userSocketMap[userId].size === 0) {
         delete userSocketMap[userId];
       }
