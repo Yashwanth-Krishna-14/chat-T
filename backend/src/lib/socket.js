@@ -5,48 +5,50 @@ import express from "express";
 const app = express();
 const server = http.createServer(app);
 
+// userId -> Set of socketIds
+const userSocketMap = {};
+
+export function getReceiverSocketIds(userId) {
+  return userSocketMap[userId] ? Array.from(userSocketMap[userId]) : [];
+}
+
 const io = new Server(server, {
   cors: {
-    origin: function (origin, callback) {
-      // Allow requests with no origin
-      if (!origin) return callback(null, true);
-      
-      const allowedOrigins = [
-        process.env.CLIENT_URL,
-        "http://localhost:5173",
-        "https://localhost:5173"
-      ].filter(Boolean);
-      
-      if (allowedOrigins.indexOf(origin) !== -1) {
-        callback(null, true);
-      } else {
-        console.log("Socket.io CORS blocked:", origin);
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
     methods: ["GET", "POST"],
     credentials: true,
   },
-  transports: ["websocket", "polling"], // Ensure both transports work
+  transports: ["polling", "websocket"], // polling first is more stable on Render
+  pingTimeout: 60000,
+  pingInterval: 25000,
 });
 
-export function getReceiverSocketId(userId) {
-  return userSocketMap[userId];
-}
-
-const userSocketMap = {};
-
 io.on("connection", (socket) => {
-  console.log("A user connected", socket.id);
+  console.log("A user connected:", socket.id);
 
   const userId = socket.handshake.query.userId;
-  if (userId) userSocketMap[userId] = socket.id;
+
+  if (userId) {
+    if (!userSocketMap[userId]) {
+      userSocketMap[userId] = new Set();
+    }
+    userSocketMap[userId].add(socket.id);
+  }
 
   io.emit("getOnlineUsers", Object.keys(userSocketMap));
 
-  socket.on("disconnect", () => {
-    console.log("A user disconnected", socket.id);
-    delete userSocketMap[userId];
+  socket.on("disconnect", (reason) => {
+    console.log("A user disconnected:", socket.id, "Reason:", reason);
+
+    if (userId && userSocketMap[userId]) {
+      userSocketMap[userId].delete(socket.id);
+
+      // remove user if no active sockets left
+      if (userSocketMap[userId].size === 0) {
+        delete userSocketMap[userId];
+      }
+    }
+
     io.emit("getOnlineUsers", Object.keys(userSocketMap));
   });
 });
