@@ -1,15 +1,16 @@
 import { Server } from "socket.io";
 import http from "http";
 import express from "express";
+import jwt from "jsonwebtoken";
 
 const app = express();
 const server = http.createServer(app);
 
 // userId -> Set(socketId)
-const userSocketMap = {};
+const userSocketMap = new Map();
 
 export function getReceiverSocketIds(userId) {
-  return userSocketMap[userId] ? Array.from(userSocketMap[userId]) : [];
+  return userSocketMap.get(userId) ? Array.from(userSocketMap.get(userId)) : [];
 }
 
 const io = new Server(server, {
@@ -18,38 +19,63 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
     credentials: true,
   },
-  transports: ["polling", "websocket"], // stable on Render
+  transports: ["polling", "websocket"],
   pingTimeout: 60000,
   pingInterval: 25000,
 });
 
+/**
+ * Socket Auth Middleware (JWT based)
+ * Frontend must connect like:
+ * io(BACKEND_URL, { auth: { token: "<JWT>" } })
+ */
+io.use((socket, next) => {
+  try {
+    const token = socket.handshake.auth?.token;
+    if (!token) return next(new Error("Unauthorized: No token provided"));
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    socket.userId = decoded.userId;
+
+    next();
+  } catch (err) {
+    console.log("❌ Socket Auth Error:", err.message);
+    next(new Error("Unauthorized: Invalid token"));
+  }
+});
+
 io.on("connection", (socket) => {
-  console.log("A user connected:", socket.id);
+  console.log("✅ User connected:", socket.id, "User:", socket.userId);
 
-  const userId = socket.handshake.query.userId;
+  const userId = socket.userId;
 
-  if (userId) {
-    if (!userSocketMap[userId]) {
-      userSocketMap[userId] = new Set();
-    }
-
-    userSocketMap[userId].add(socket.id);
+  if (!userSocketMap.has(userId)) {
+    userSocketMap.set(userId, new Set());
   }
 
-  io.emit("getOnlineUsers", Object.keys(userSocketMap));
+  userSocketMap.get(userId).add(socket.id);
+
+  // Debug log (helps catch duplicate sockets)
+  console.log(
+    `👤 User ${userId} active sockets:`,
+    userSocketMap.get(userId).size
+  );
+
+  // Emit online users list
+  io.emit("getOnlineUsers", Array.from(userSocketMap.keys()));
 
   socket.on("disconnect", (reason) => {
-    console.log("A user disconnected:", socket.id, "Reason:", reason);
+    console.log("❌ User disconnected:", socket.id, "Reason:", reason);
 
-    if (userId && userSocketMap[userId]) {
-      userSocketMap[userId].delete(socket.id);
+    if (userSocketMap.has(userId)) {
+      userSocketMap.get(userId).delete(socket.id);
 
-      if (userSocketMap[userId].size === 0) {
-        delete userSocketMap[userId];
+      if (userSocketMap.get(userId).size === 0) {
+        userSocketMap.delete(userId);
       }
     }
 
-    io.emit("getOnlineUsers", Object.keys(userSocketMap));
+    io.emit("getOnlineUsers", Array.from(userSocketMap.keys()));
   });
 });
 
