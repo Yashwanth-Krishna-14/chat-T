@@ -7,6 +7,7 @@ import { connectDB } from "./lib/db.js";
 import authRoutes from "./routes/auth.route.js";
 import messageRoutes from "./routes/message.route.js";
 import { app, server } from "./lib/socket.js";
+import conversationRoutes from "./routes/conversation.route.js";
 // import { cookieDebug } from "./middleware/cookieDebug.middleware.js";
 
 dotenv.config();
@@ -58,6 +59,7 @@ app.get("/api/debug/cookies", (req, res) => {
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
+app.use("/api/conversations", conversationRoutes);
 
 // Start server
 server.listen(PORT, () => {
