@@ -2,35 +2,42 @@ import mongoose from "mongoose";
 
 const messageSchema = new mongoose.Schema(
   {
+    conversationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Conversation",
+      required: true,
+    },
+
     senderId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
-    receiverId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-    },
+
     text: {
       type: String,
+      default: "",
     },
+
     image: {
       type: String,
+      default: "",
+    },
+
+    // better than createdAt TTL
+    expiresAt: {
+      type: Date,
+      required: true,
     },
   },
   { timestamps: true }
 );
 
-// ✅ Auto-delete messages after 4 days
-messageSchema.index(
-  { createdAt: 1 },
-  { expireAfterSeconds: 4 * 24 * 60 * 60 }
-);
+// fast message fetching + pagination
+messageSchema.index({ conversationId: 1, createdAt: -1 });
 
-// ✅ Index for faster chat queries
-messageSchema.index({ senderId: 1, receiverId: 1, createdAt: -1 });
-messageSchema.index({ receiverId: 1, senderId: 1, createdAt: -1 });
+// TTL index (delete exactly after expiresAt time)
+messageSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 const Message = mongoose.model("Message", messageSchema);
 
