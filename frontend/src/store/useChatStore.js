@@ -5,29 +5,36 @@ import { useAuthStore } from "./useAuthStore";
 
 export const useChatStore = create((set, get) => ({
   messages: [],
-  users: [],
-  selectedUser: null,
-  isUsersLoading: false,
+  conversations: [],
+  selectedConversation: null,
+
+  isConversationsLoading: false,
   isMessagesLoading: false,
 
-  messageListener: null, // ✅ store reference
+  messageListener: null,
 
-  getUsers: async () => {
-    set({ isUsersLoading: true });
+  // ✅ Fetch conversations list (sidebar)
+  getConversations: async () => {
+    set({ isConversationsLoading: true });
+
     try {
-      const res = await axiosInstance.get("/messages/users");
-      set({ users: res.data });
+      const res = await axiosInstance.get("/conversations");
+      set({ conversations: res.data });
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to fetch users");
+      toast.error(
+        error.response?.data?.message || "Failed to fetch conversations"
+      );
     } finally {
-      set({ isUsersLoading: false });
+      set({ isConversationsLoading: false });
     }
   },
 
-  getMessages: async (userId) => {
+  // ✅ Fetch messages using conversationId (Phase 6)
+  getMessages: async (conversationId) => {
     set({ isMessagesLoading: true });
+
     try {
-      const res = await axiosInstance.get(`/messages/${userId}`);
+      const res = await axiosInstance.get(`/messages/${conversationId}`);
       set({ messages: res.data });
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to fetch messages");
@@ -36,49 +43,63 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
+  // ✅ Send message using receiverId (not conversationId)
   sendMessage: async (messageData) => {
-    const { selectedUser } = get();
-    if (!selectedUser) return;
+    const { selectedConversation } = get();
+    const { authUser } = useAuthStore.getState();
+
+    if (!selectedConversation) return;
+
+    // Find the other user (receiver)
+    const receiver = selectedConversation.participants.find(
+      (u) => u._id !== authUser._id
+    );
+
+    if (!receiver) {
+      return toast.error("Receiver not found");
+    }
 
     try {
       const res = await axiosInstance.post(
-        `/messages/send/${selectedUser._id}`,
+        `/messages/send/${receiver._id}`,
         messageData
       );
 
-      set({ messages: [...get().messages, res.data] });
+      set((state) => ({
+        messages: [...state.messages, res.data],
+      }));
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to send message");
     }
   },
 
+  // ✅ Socket subscription (conversation-based filtering)
   subscribeToMessages: () => {
-    const { selectedUser, messageListener } = get();
-    if (!selectedUser) return;
+    const { selectedConversation, messageListener } = get();
+    if (!selectedConversation) return;
 
     const socket = useAuthStore.getState().socket;
     if (!socket) return;
 
-    // ✅ if already subscribed, unsubscribe first
+    // remove old listener if exists
     if (messageListener) {
       socket.off("newMessage", messageListener);
     }
 
     const handler = (newMessage) => {
-      const currentSelectedUser = get().selectedUser;
-      if (!currentSelectedUser) return;
+      const currentConversation = get().selectedConversation;
+      if (!currentConversation) return;
 
-      const isFromSelectedUser =
-        newMessage.senderId === currentSelectedUser._id;
+      // Only accept messages belonging to this conversation
+      if (newMessage.conversationId !== currentConversation._id) return;
 
-      if (!isFromSelectedUser) return;
-
-      set({ messages: [...get().messages, newMessage] });
+      set((state) => ({
+        messages: [...state.messages, newMessage],
+      }));
     };
 
     socket.on("newMessage", handler);
 
-    // store handler reference so we can remove it later
     set({ messageListener: handler });
   },
 
@@ -93,5 +114,7 @@ export const useChatStore = create((set, get) => ({
     set({ messageListener: null });
   },
 
-  setSelectedUser: (selectedUser) => set({ selectedUser }),
+  setSelectedConversation: (conversation) => {
+    set({ selectedConversation: conversation, messages: [] });
+  },
 }));
