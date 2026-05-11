@@ -36,4 +36,7 @@ export const createConversation = async (req, res) => {
     console.log("createConversation error:", error.message);
     res.status(500).json({ message: "Internal server error" });
   }
+
+  console.log("REQ USER:", req.user);
+console.log("PARAM USERID:", req.params.userId);
 };
