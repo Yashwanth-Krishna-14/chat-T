@@ -35,7 +35,7 @@ export const useChatStore = create((set, get) => ({
     set({ isConversationsLoading: true });
 
     try {
-      const res = await axiosInstance.get("/conversations");
+      const res = await axiosInstance.get("/api/conversations");
       set({ conversations: res.data });
     } catch (error) {
       toast.error(
