@@ -3,6 +3,21 @@ import User from "../models/user.model.js";
 import bcrypt from "bcryptjs";
 import cloudinary from "../lib/cloudinary.js";
 
+const buildUserResponse = (user, token = null) => {
+  return {
+    user: {
+      _id: user._id,
+      fullName: user.fullName,
+      email: user.email,
+      profilePic: user.profilePic,
+      authProvider: user.authProvider,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    },
+    token,
+  };
+};
+
 export const signup = async (req, res) => {
   const { fullName, email, password } = req.body;
 
@@ -12,15 +27,18 @@ export const signup = async (req, res) => {
     }
 
     if (password.length < 6) {
-      return res.status(400).json({ message: "Password must be at least 6 characters" });
+      return res
+        .status(400)
+        .json({ message: "Password must be at least 6 characters" });
     }
 
-    const user = await User.findOne({ email });
+    const userExists = await User.findOne({ email });
 
-    if (user) {
-      if (user.authProvider === "google") {
+    if (userExists) {
+      if (userExists.authProvider === "google") {
         return res.status(400).json({
-          message: "This email is already registered with Google. Please sign in with Google.",
+          message:
+            "This email is already registered with Google. Please sign in with Google.",
         });
       }
 
@@ -39,19 +57,11 @@ export const signup = async (req, res) => {
 
     await newUser.save();
 
-    // generate jwt token + set cookie
     const token = generateToken(newUser._id, res);
 
-    res.status(201).json({
-      _id: newUser._id,
-      fullName: newUser.fullName,
-      email: newUser.email,
-      profilePic: newUser.profilePic,
-      authProvider: newUser.authProvider,
-      token,
-    });
+    res.status(201).json(buildUserResponse(newUser, token));
   } catch (error) {
-    console.log("Error in signup controller", error.message);
+    console.log("Error in signup controller:", error.message);
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
@@ -66,10 +76,10 @@ export const login = async (req, res) => {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    // Check if user is a Google user trying to use password login
     if (user.authProvider === "google") {
       return res.status(400).json({
-        message: "This account uses Google authentication. Please sign in with Google.",
+        message:
+          "This account uses Google authentication. Please sign in with Google.",
       });
     }
 
@@ -79,29 +89,27 @@ export const login = async (req, res) => {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    // generate jwt token + set cookie
     const token = generateToken(user._id, res);
 
-    res.status(200).json({
-      _id: user._id,
-      fullName: user.fullName,
-      email: user.email,
-      profilePic: user.profilePic,
-      authProvider: user.authProvider,
-      token,
-    });
+    res.status(200).json(buildUserResponse(user, token));
   } catch (error) {
-    console.log("Error in login controller", error.message);
+    console.log("Error in login controller:", error.message);
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
 
 export const logout = (req, res) => {
   try {
-    res.cookie("jwt", "", { maxAge: 0 });
+    res.cookie("jwt", "", {
+      maxAge: 0,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "none",
+    });
+
     res.status(200).json({ message: "Logged out successfully" });
   } catch (error) {
-    console.log("Error in logout controller", error.message);
+    console.log("Error in logout controller:", error.message);
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
@@ -121,20 +129,26 @@ export const updateProfile = async (req, res) => {
       userId,
       { profilePic: uploadResponse.secure_url },
       { new: true }
-    );
+    ).select("-password");
 
-    res.status(200).json(updatedUser);
+    res.status(200).json(buildUserResponse(updatedUser));
   } catch (error) {
-    console.log("error in update profile:", error);
+    console.log("Error in updateProfile controller:", error.message);
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
-export const checkAuth = (req, res) => {
+export const checkAuth = async (req, res) => {
   try {
-    res.status(200).json(req.user);
+    const user = await User.findById(req.user._id).select("-password");
+
+    if (!user) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    res.status(200).json(buildUserResponse(user));
   } catch (error) {
-    console.log("Error in checkAuth controller", error.message);
+    console.log("Error in checkAuth controller:", error.message);
     res.status(500).json({ message: "Internal Server Error" });
   }
 };

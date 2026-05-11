@@ -10,7 +10,7 @@ const SOCKET_URL =
 
 export const useAuthStore = create((set, get) => ({
   authUser: null,
-  token: null, // store token explicitly
+  token: null,
   isSigningUp: false,
   isLoggingIn: false,
   isGoogleLoggingIn: false,
@@ -23,10 +23,9 @@ export const useAuthStore = create((set, get) => ({
     try {
       const res = await axiosInstance.get("/auth/check");
 
-      // If your backend returns { user, token }
+      // backend returns user directly
       set({
-        authUser: res.data.user,
-        token: res.data.token,
+        authUser: res.data,
       });
 
       get().connectSocket();
@@ -45,7 +44,7 @@ export const useAuthStore = create((set, get) => ({
       const res = await axiosInstance.post("/auth/signup", data);
 
       set({
-        authUser: res.data.user,
+        authUser: res.data,
         token: res.data.token,
       });
 
@@ -65,7 +64,7 @@ export const useAuthStore = create((set, get) => ({
       const res = await axiosInstance.post("/auth/login", data);
 
       set({
-        authUser: res.data.user,
+        authUser: res.data,
         token: res.data.token,
       });
 
@@ -85,7 +84,7 @@ export const useAuthStore = create((set, get) => ({
       const res = await axiosInstance.post("/auth/google", { token });
 
       set({
-        authUser: res.data.user,
+        authUser: res.data,
         token: res.data.token,
       });
 
@@ -117,7 +116,9 @@ export const useAuthStore = create((set, get) => ({
     try {
       const res = await axiosInstance.put("/auth/update-profile", data);
 
-      set({ authUser: res.data.user });
+      // backend returns updated user directly
+      set({ authUser: res.data });
+
       toast.success("Profile updated successfully");
     } catch (error) {
       console.log("error in update profile:", error);
@@ -130,16 +131,16 @@ export const useAuthStore = create((set, get) => ({
   connectSocket: () => {
     const { authUser, token, socket } = get();
 
-    if (!authUser || !token || socket?.connected) return;
+    // token is optional because cookie auth exists
+    if (!authUser || socket?.connected) return;
 
-    // if socket exists but not connected, disconnect it first
     if (socket) {
       socket.off();
       socket.disconnect();
     }
 
     const newSocket = io(SOCKET_URL, {
-      auth: { token }, // ✅ JWT sent securely
+      auth: token ? { token } : {},
       withCredentials: true,
       transports: ["websocket", "polling"],
       reconnection: true,
