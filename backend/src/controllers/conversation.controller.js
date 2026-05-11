@@ -2,6 +2,14 @@ import Conversation from "../models/conversation.model.js";
 
 export const createConversation = async (req, res) => {
   try {
+    console.log("REQ USER:", req.user);
+    console.log("PARAM USERID:", req.params.userId);
+
+    // 🔒 Guard: prevents 500 crash
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
     const myId = req.user._id;
     const { userId } = req.params;
 
@@ -10,10 +18,13 @@ export const createConversation = async (req, res) => {
     }
 
     if (myId.toString() === userId.toString()) {
-      return res.status(400).json({ message: "Cannot create conversation with yourself" });
+      return res
+        .status(400)
+        .json({ message: "Cannot create conversation with yourself" });
     }
 
-    const participants = [myId.toString(), userId.toString()].sort();
+    // ✅ IMPORTANT: keep ObjectIds consistent (no strings)
+    const participants = [myId, userId].sort();
 
     let conversation = await Conversation.findOne({
       participants: { $all: participants, $size: 2 },
@@ -31,12 +42,9 @@ export const createConversation = async (req, res) => {
         .populate("lastMessage");
     }
 
-    res.status(200).json(conversation);
+    return res.status(200).json(conversation);
   } catch (error) {
     console.log("createConversation error:", error.message);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
-
-  console.log("REQ USER:", req.user);
-console.log("PARAM USERID:", req.params.userId);
 };
