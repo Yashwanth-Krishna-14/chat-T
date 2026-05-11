@@ -48,3 +48,22 @@ export const createConversation = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+
+
+export const getConversations = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const conversations = await Conversation.find({
+      participants: { $in: [userId] }
+    })
+      .populate("participants", "fullName profilePic")
+      .populate("lastMessage")
+      .sort({ updatedAt: -1 });
+
+    return res.status(200).json(conversations);
+  } catch (error) {
+    console.log("getConversations error:", error.message);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
