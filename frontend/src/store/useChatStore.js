@@ -8,10 +8,27 @@ export const useChatStore = create((set, get) => ({
   conversations: [],
   selectedConversation: null,
 
+  users: [], // ✅ required for new chat modal
+  isUsersLoading: false,
+
   isConversationsLoading: false,
   isMessagesLoading: false,
 
   messageListener: null,
+
+  // ✅ Fetch users list (for New Chat modal)
+  getUsers: async () => {
+    set({ isUsersLoading: true });
+
+    try {
+      const res = await axiosInstance.get("/messages/users");
+      set({ users: res.data });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to fetch users");
+    } finally {
+      set({ isUsersLoading: false });
+    }
+  },
 
   // ✅ Fetch conversations list (sidebar)
   getConversations: async () => {
@@ -29,7 +46,7 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
-  // ✅ Fetch messages using conversationId (Phase 6)
+  // ✅ Fetch messages using conversationId
   getMessages: async (conversationId) => {
     set({ isMessagesLoading: true });
 
@@ -43,20 +60,45 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
-  // ✅ Send message using receiverId (not conversationId)
+  // ✅ Create / find conversation (used when starting a new chat)
+  createConversation: async (userId) => {
+    try {
+      const res = await axiosInstance.post(`/conversations/${userId}`);
+      const newConversation = res.data;
+
+      const exists = get().conversations.find(
+        (c) => c._id === newConversation._id
+      );
+
+      if (!exists) {
+        set({ conversations: [newConversation, ...get().conversations] });
+      }
+
+      set({ selectedConversation: newConversation, messages: [] });
+
+      return newConversation; // ✅ IMPORTANT
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message || "Failed to create conversation"
+      );
+      return null;
+    }
+  },
+
+  // ✅ Send message using receiverId
   sendMessage: async (messageData) => {
     const { selectedConversation } = get();
     const { authUser } = useAuthStore.getState();
 
     if (!selectedConversation) return;
 
-    // Find the other user (receiver)
     const receiver = selectedConversation.participants.find(
       (u) => u._id !== authUser._id
     );
 
     if (!receiver) {
-      return toast.error("Receiver not found");
+      toast.error("Receiver not found");
+      return;
     }
 
     try {
@@ -68,12 +110,21 @@ export const useChatStore = create((set, get) => ({
       set((state) => ({
         messages: [...state.messages, res.data],
       }));
+
+      // ✅ update lastMessage locally so sidebar updates instantly
+      set((state) => ({
+        conversations: state.conversations.map((conv) =>
+          conv._id === selectedConversation._id
+            ? { ...conv, lastMessage: res.data, updatedAt: new Date() }
+            : conv
+        ),
+      }));
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to send message");
     }
   },
 
-  // ✅ Socket subscription (conversation-based filtering)
+  // ✅ Socket subscription
   subscribeToMessages: () => {
     const { selectedConversation, messageListener } = get();
     if (!selectedConversation) return;
@@ -81,7 +132,6 @@ export const useChatStore = create((set, get) => ({
     const socket = useAuthStore.getState().socket;
     if (!socket) return;
 
-    // remove old listener if exists
     if (messageListener) {
       socket.off("newMessage", messageListener);
     }
@@ -90,16 +140,23 @@ export const useChatStore = create((set, get) => ({
       const currentConversation = get().selectedConversation;
       if (!currentConversation) return;
 
-      // Only accept messages belonging to this conversation
       if (newMessage.conversationId !== currentConversation._id) return;
 
       set((state) => ({
         messages: [...state.messages, newMessage],
       }));
+
+      // ✅ update sidebar lastMessage in realtime
+      set((state) => ({
+        conversations: state.conversations.map((conv) =>
+          conv._id === currentConversation._id
+            ? { ...conv, lastMessage: newMessage, updatedAt: new Date() }
+            : conv
+        ),
+      }));
     };
 
     socket.on("newMessage", handler);
-
     set({ messageListener: handler });
   },
 

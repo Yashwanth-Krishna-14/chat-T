@@ -6,4 +6,7 @@ const router = express.Router();
 
 router.get("/", protectRoute, getConversations);
 
+// create/find 1-to-1 conversation
+router.post("/:userId", protectRoute, createConversation);
+
 export default router;
