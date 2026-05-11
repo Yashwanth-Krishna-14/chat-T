@@ -1,10 +1,8 @@
+import mongoose from "mongoose";
 import Conversation from "../models/conversation.model.js";
 
 export const createConversation = async (req, res) => {
   try {
-    console.log("REQ USER:", req.user);
-    console.log("PARAM USERID:", req.params.userId);
-
     // 🔒 Guard: prevents 500 crash
     if (!req.user || !req.user._id) {
       return res.status(401).json({ message: "Unauthorized" });
@@ -17,14 +15,23 @@ export const createConversation = async (req, res) => {
       return res.status(400).json({ message: "userId is required" });
     }
 
-    if (myId.toString() === userId.toString()) {
+    // Validate userId is a valid ObjectId
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: "Invalid user ID format" });
+    }
+
+    // Convert both IDs to ObjectId for consistency
+    const myObjectId = new mongoose.Types.ObjectId(myId);
+    const targetObjectId = new mongoose.Types.ObjectId(userId);
+
+    if (myObjectId.equals(targetObjectId)) {
       return res
         .status(400)
         .json({ message: "Cannot create conversation with yourself" });
     }
 
-    // ✅ IMPORTANT: keep ObjectIds consistent (no strings)
-    const participants = [myId, userId].sort();
+    // ✅ Ensure both are ObjectIds
+    const participants = [myObjectId, targetObjectId].sort();
 
     let conversation = await Conversation.findOne({
       participants: { $all: participants, $size: 2 },
@@ -52,10 +59,21 @@ export const createConversation = async (req, res) => {
 
 export const getConversations = async (req, res) => {
   try {
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
     const userId = req.user._id;
+    
+    // Ensure userId is a valid ObjectId
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: "Invalid user ID" });
+    }
+
+    const userObjectId = new mongoose.Types.ObjectId(userId);
 
     const conversations = await Conversation.find({
-      participants: { $in: [userId] }
+      participants: { $in: [userObjectId] }
     })
       .populate("participants", "fullName profilePic")
       .populate("lastMessage")

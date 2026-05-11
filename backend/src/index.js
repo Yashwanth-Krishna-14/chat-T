@@ -8,6 +8,7 @@ import authRoutes from "./routes/auth.route.js";
 import messageRoutes from "./routes/message.route.js";
 import { app, server } from "./lib/socket.js";
 import conversationRoutes from "./routes/conversation.route.js";
+import { protectRoute } from "./middleware/auth.middleware.js";
 // import { cookieDebug } from "./middleware/cookieDebug.middleware.js";
 
 dotenv.config();
@@ -65,4 +66,18 @@ app.use("/api/conversations", conversationRoutes);
 server.listen(PORT, () => {
   console.log("Server is running on PORT:" + PORT);
   connectDB();
+});
+
+
+// Debug endpoint to check authentication
+app.get("/api/debug/auth", protectRoute, (req, res) => {
+  res.json({
+    authenticated: true,
+    user: req.user,
+    cookies: req.cookies,
+    headers: {
+      authorization: req.headers.authorization,
+      origin: req.headers.origin,
+    }
+  });
 });

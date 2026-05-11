@@ -10,3 +10,17 @@ export const axiosInstance = axios.create({
     "Content-Type": "application/json",
   },
 });
+
+// Add response interceptor to handle authentication errors
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Clear auth state on 401
+      console.log("Authentication error, clearing user state");
+      // You might want to redirect to login page here
+      // window.location.href = "/login";
+    }
+    return Promise.reject(error);
+  }
+);

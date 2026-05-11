@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
 import User from "../models/user.model.js";
 
 export const protectRoute = async (req, res, next) => {
@@ -28,7 +29,12 @@ export const protectRoute = async (req, res, next) => {
       return res.status(401).json({ message: "Unauthorized - Invalid Token" });
     }
 
-    // 5) Fetch user
+    // 5) Validate userId is a valid ObjectId
+    if (!mongoose.Types.ObjectId.isValid(decoded.userId)) {
+      return res.status(401).json({ message: "Unauthorized - Invalid user ID in token" });
+    }
+
+    // 6) Fetch user
     const user = await User.findById(decoded.userId).select("-password");
 
     if (!user) {
