@@ -1,14 +1,21 @@
 import Conversation from "../models/conversation.model.js";
 
 export async function findOrCreateConversation(userA, userB) {
-  const participants = [userA.toString(), userB.toString()].sort();
+  const participants = [userA, userB].sort((a, b) =>
+    a.toString().localeCompare(b.toString())
+  );
 
   let conversation = await Conversation.findOne({
-    participants: { $all: participants, $size: 2 },
+    participants: {
+      $all: participants,
+      $size: 2,
+    },
   });
 
   if (!conversation) {
-    conversation = await Conversation.create({ participants });
+    conversation = await Conversation.create({
+      participants,
+    });
   }
 
   return conversation;

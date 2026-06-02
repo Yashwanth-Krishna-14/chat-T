@@ -1,59 +1,3 @@
-import User from "../models/user.model.js";
-import Message from "../models/message.model.js";
-import Conversation from "../models/conversation.model.js";
-import cloudinary from "../lib/cloudinary.js";
-import { getReceiverSocketIds, io } from "../lib/socket.js";
-import { findOrCreateConversation } from "../lib/conversation.js";
-
-// Sidebar users (unchanged)
-export const getUsersForSidebar = async (req, res) => {
-  try {
-    const loggedInUserId = req.user._id;
-
-    const filteredUsers = await User.find({
-      _id: { $ne: loggedInUserId },
-    }).select("-password");
-
-    res.status(200).json(filteredUsers);
-  } catch (error) {
-    console.error("Error in getUsersForSidebar:", error.message);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-// Get messages between logged-in user and selected user (conversation based)
-export const getMessages = async (req, res) => {
-  try {
-    const { conversationId } = req.params;
-    const myId = req.user._id;
-
-    const conversation = await Conversation.findById(conversationId);
-
-    if (!conversation) {
-      return res.status(404).json({ error: "Conversation not found" });
-    }
-
-    // Authorization check: user must be part of conversation
-    const isParticipant = conversation.participants
-      .map((id) => id.toString())
-      .includes(myId.toString());
-
-    if (!isParticipant) {
-      return res.status(403).json({ error: "Unauthorized access" });
-    }
-
-    const messages = await Message.find({
-      conversationId,
-      expiresAt: { $gt: new Date() }, // ephemeral filter
-    }).sort({ createdAt: 1 });
-
-    res.status(200).json(messages);
-  } catch (error) {
-    console.log("Error in getMessages controller:", error.message);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
 // Send message (conversation based)
 export const sendMessage = async (req, res) => {
   try {
@@ -73,10 +17,15 @@ export const sendMessage = async (req, res) => {
     }
 
     // Find or create conversation
-    const conversation = await findOrCreateConversation(senderId, receiverId);
+    const conversation = await findOrCreateConversation(
+      senderId,
+      receiverId
+    );
 
     // Set expiry (4 days)
-    const expiresAt = new Date(Date.now() + 4 * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(
+      Date.now() + 4 * 24 * 60 * 60 * 1000
+    );
 
     // Create message with conversationId
     const newMessage = await Message.create({
@@ -87,9 +36,18 @@ export const sendMessage = async (req, res) => {
       expiresAt,
     });
 
-    // Update conversation metadata
-    conversation.lastMessage = newMessage._id;
-    await conversation.save();
+    // Update latest message atomically
+    await Conversation.findByIdAndUpdate(
+      conversation._id,
+      {
+        $set: {
+          lastMessage: newMessage._id,
+        },
+      },
+      {
+        new: true,
+      }
+    );
 
     // Emit message to all receiver sockets
     const receiverSocketIds = getReceiverSocketIds(receiverId);
@@ -99,7 +57,9 @@ export const sendMessage = async (req, res) => {
     });
 
     // Emit message back to sender sockets too (multi-tab sync)
-    const senderSocketIds = getReceiverSocketIds(senderId.toString());
+    const senderSocketIds = getReceiverSocketIds(
+      senderId.toString()
+    );
 
     senderSocketIds.forEach((socketId) => {
       io.to(socketId).emit("newMessage", newMessage);
@@ -107,7 +67,12 @@ export const sendMessage = async (req, res) => {
 
     res.status(201).json(newMessage);
   } catch (error) {
-    console.log("Error in sendMessage controller:", error.message);
-    res.status(500).json({ error: "Internal server error" });
+    console.log(
+      "Error in sendMessage controller:",
+      error.message
+    );
+    res.status(500).json({
+      error: "Internal server error",
+    });
   }
 };
