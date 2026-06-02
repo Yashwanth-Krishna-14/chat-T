@@ -9,17 +9,28 @@ const conversationSchema = new mongoose.Schema(
         required: true,
       },
     ],
+
+    // Stores the latest message in the conversation
+    lastMessage: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Message",
+      default: null,
+    },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
-// Ensure participants are always stored in consistent order
+// Ensure participants are stored in a consistent order
 conversationSchema.pre("save", function (next) {
-  this.participants.sort();
+  this.participants.sort((a, b) =>
+    a.toString().localeCompare(b.toString())
+  );
   next();
 });
 
-// Efficient lookup: find conversation by participants
+// Efficient lookup by participants
 conversationSchema.index({ participants: 1 });
 
 export default mongoose.model("Conversation", conversationSchema);
